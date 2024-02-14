@@ -78,12 +78,12 @@ const create$4 = () => new Map();
  * ```
  *
  * @function
- * @template V,K
- * @template {Map<K,V>} MAP
+ * @template {Map<any, any>} MAP
+ * @template {MAP extends Map<any,infer V> ? function():V : unknown} CF
  * @param {MAP} map
- * @param {K} key
- * @param {function():V} createT
- * @return {V}
+ * @param {MAP extends Map<infer K,any> ? K : unknown} key
+ * @param {CF} createT
+ * @return {ReturnType<CF>}
  */
 const setIfUndefined = (map, key, createT) => {
   let set = map.get(key);
@@ -137,6 +137,8 @@ const create$3 = () => new Set();
  */
 const from = Array.from;
 
+const isArray = Array.isArray;
+
 /**
  * Observable class prototype.
  *
@@ -144,9 +146,11 @@ const from = Array.from;
  */
 
 
+/* c8 ignore start */
 /**
  * Handles named events.
  *
+ * @deprecated
  * @template N
  */
 class Observable {
@@ -213,6 +217,7 @@ class Observable {
     this._observers = create$4();
   }
 }
+/* c8 ignore end */
 
 /**
  * An estimate for the difference in milliseconds between the local clock
@@ -359,7 +364,7 @@ if (utf8TextDecoder && utf8TextDecoder.decode(new Uint8Array()).length === 1) {
 /* c8 ignore next */
 const undefinedToNull = v => v === undefined ? null : v;
 
-/* global localStorage, addEventListener */
+/* eslint-env browser */
 
 /**
  * Isomorphic variable storage.
@@ -401,7 +406,7 @@ let usePolyfill = true;
 /* c8 ignore start */
 try {
   // if the same-origin rule is violated, accessing localStorage might thrown an error
-  if (typeof localStorage !== 'undefined') {
+  if (typeof localStorage !== 'undefined' && localStorage) {
     _localStorage = localStorage;
     usePolyfill = false;
   }
@@ -424,6 +429,15 @@ const varStorage = _localStorage;
 const onChange = eventHandler => usePolyfill || addEventListener('storage', /** @type {any} */ (eventHandler));
 
 /**
+ * A polyfill for `removeEventListener('storage', event => {..})` that does nothing if the polyfill is being used.
+ *
+ * @param {function({ key: string, newValue: string, oldValue: string }): void} eventHandler
+ * @function
+ */
+/* c8 ignore next */
+const offChange = eventHandler => usePolyfill || removeEventListener('storage', /** @type {any} */ (eventHandler));
+
+/**
  * Common functions and function call helpers.
  *
  * @module function
@@ -441,7 +455,6 @@ const nop = () => {};
  */
 // @ts-ignore
 const isOneOf = (value, options) => options.includes(value);
-/* c8 ignore stop */
 
 /**
  * Isomorphic module to work access the environment (query params, env variables).
@@ -450,10 +463,10 @@ const isOneOf = (value, options) => options.includes(value);
  */
 
 
-/* c8 ignore next */
+/* c8 ignore next 2 */
 // @ts-ignore
-const isNode = typeof process !== 'undefined' && process.release &&
-  /node|io\.js/.test(process.release.name);
+const isNode = typeof process !== 'undefined' && process.release && /node|io\.js/.test(process.release.name) && Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]';
+
 /* c8 ignore next */
 const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined' && !isNode;
 
@@ -596,10 +609,6 @@ const BITS31 = 0x7FFFFFFF;
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
-/**
- * @module number
- */
-
 /* c8 ignore next */
 const isInteger = Number.isInteger || (num => typeof num === 'number' && isFinite(num) && floor(num) === num);
 
@@ -614,7 +623,7 @@ const isInteger = Number.isInteger || (num => typeof num === 'number' && isFinit
  *
  * ```js
  * // encoding step
- * const encoder = new encoding.createEncoder()
+ * const encoder = encoding.createEncoder()
  * encoding.writeVarUint(encoder, 256)
  * encoding.writeVarString(encoder, 'Hello world!')
  * const buf = encoding.toUint8Array(encoder)
@@ -622,7 +631,7 @@ const isInteger = Number.isInteger || (num => typeof num === 'number' && isFinit
  *
  * ```js
  * // decoding step
- * const decoder = new decoding.createDecoder(buf)
+ * const decoder = decoding.createDecoder(buf)
  * decoding.readVarUint(decoder) // => 256
  * decoding.readVarString(decoder) // => 'Hello world!'
  * decoding.hasContent(decoder) // => false - all data is read
@@ -682,7 +691,7 @@ const toUint8Array = encoder => {
     uint8arr.set(d, curPos);
     curPos += d.length;
   }
-  uint8arr.set(createUint8ArrayViewFromArrayBuffer(encoder.cbuf.buffer, 0, encoder.cpos), curPos);
+  uint8arr.set(new Uint8Array(encoder.cbuf.buffer, 0, encoder.cpos), curPos);
   return uint8arr
 };
 
@@ -696,7 +705,7 @@ const toUint8Array = encoder => {
 const verifyLen = (encoder, len) => {
   const bufferLen = encoder.cbuf.length;
   if (bufferLen - encoder.cpos < len) {
-    encoder.bufs.push(createUint8ArrayViewFromArrayBuffer(encoder.cbuf.buffer, 0, encoder.cpos));
+    encoder.bufs.push(new Uint8Array(encoder.cbuf.buffer, 0, encoder.cpos));
     encoder.cbuf = new Uint8Array(max(bufferLen, len) * 2);
     encoder.cpos = 0;
   }
@@ -819,7 +828,7 @@ const _writeVarStringPolyfill = (encoder, str) => {
  * @param {String} str The string that is to be encoded.
  */
 /* c8 ignore next */
-const writeVarString = (utf8TextEncoder && utf8TextEncoder.encodeInto) ? _writeVarStringNative : _writeVarStringPolyfill;
+const writeVarString = (utf8TextEncoder && /** @type {any} */ (utf8TextEncoder).encodeInto) ? _writeVarStringNative : _writeVarStringPolyfill;
 
 /**
  * Append fixed-length Uint8Array to the encoder.
@@ -981,7 +990,7 @@ const writeAny = (encoder, data) => {
       if (data === null) {
         // TYPE 126: null
         write(encoder, 126);
-      } else if (data instanceof Array) {
+      } else if (isArray(data)) {
         // TYPE 117: Array
         write(encoder, 117);
         writeVarUint(encoder, data.length);
@@ -1038,7 +1047,7 @@ const create$2 = s => new Error(s);
  *
  * ```js
  * // encoding step
- * const encoder = new encoding.createEncoder()
+ * const encoder = encoding.createEncoder()
  * encoding.writeVarUint(encoder, 256)
  * encoding.writeVarString(encoder, 'Hello world!')
  * const buf = encoding.toUint8Array(encoder)
@@ -1046,7 +1055,7 @@ const create$2 = s => new Error(s);
  *
  * ```js
  * // decoding step
- * const decoder = new decoding.createDecoder(buf)
+ * const decoder = decoding.createDecoder(buf)
  * decoding.readVarUint(decoder) // => 256
  * decoding.readVarString(decoder) // => 'Hello world!'
  * decoding.hasContent(decoder) // => false - all data is read
@@ -1101,7 +1110,7 @@ const createDecoder = uint8Array => new Decoder(uint8Array);
  * @return {Uint8Array}
  */
 const readUint8Array = (decoder, len) => {
-  const view = createUint8ArrayViewFromArrayBuffer(decoder.arr.buffer, decoder.pos + decoder.arr.byteOffset, len);
+  const view = new Uint8Array(decoder.arr.buffer, decoder.pos + decoder.arr.byteOffset, len);
   decoder.pos += len;
   return view
 };
@@ -1392,7 +1401,7 @@ const fromBase64Browser = s => {
  */
 const fromBase64Node = s => {
   const buf = Buffer.from(s, 'base64');
-  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+  return createUint8ArrayViewFromArrayBuffer(buf.buffer, buf.byteOffset, buf.byteLength)
 };
 
 /* c8 ignore next */
@@ -1426,7 +1435,11 @@ class LocalStoragePolyfill {
      * @type {null|function({data:ArrayBuffer}):void}
      */
     this.onmessage = null;
-    onChange(e => e.key === room && this.onmessage !== null && this.onmessage({ data: fromBase64(e.newValue || '') }));
+    /**
+     * @param {any} e
+     */
+    this._onChange = e => e.key === room && this.onmessage !== null && this.onmessage({ data: fromBase64(e.newValue || '') });
+    onChange(this._onChange);
   }
 
   /**
@@ -1434,6 +1447,10 @@ class LocalStoragePolyfill {
    */
   postMessage (buf) {
     varStorage.setItem(this.room, toBase64(createUint8ArrayFromArrayBuffer(buf)));
+  }
+
+  close () {
+    offChange(this._onChange);
   }
 }
 /* c8 ignore stop */
@@ -1504,19 +1521,6 @@ const publish = (room, data, origin = null) => {
 };
 
 /**
- * Utility module to work with EcmaScript Symbols.
- *
- * @module symbol
- */
-
-/**
- * Return fresh symbol.
- *
- * @return {Symbol}
- */
-const create$1 = Symbol;
-
-/**
  * Working with value pairs.
  *
  * @module pair
@@ -1542,7 +1546,7 @@ class Pair {
  * @param {R} right
  * @return {Pair<L,R>}
  */
-const create = (left, right) => new Pair(left, right);
+const create$1 = (left, right) => new Pair(left, right);
 
 /* eslint-env browser */
 
@@ -1555,6 +1559,19 @@ const create = (left, right) => new Pair(left, right);
  */
 const mapToStyleString = m => map(m, (value, key) => `${key}:${value};`).join('');
 /* c8 ignore stop */
+
+/**
+ * Utility module to work with EcmaScript Symbols.
+ *
+ * @module symbol
+ */
+
+/**
+ * Return fresh symbol.
+ *
+ * @return {Symbol}
+ */
+const create = Symbol;
 
 /**
  * Utility module to work with time.
@@ -1570,6 +1587,75 @@ const mapToStyleString = m => map(m, (value, key) => `${key}:${value};`).join(''
  */
 const getUnixTime = Date.now;
 
+const BOLD = create();
+const UNBOLD = create();
+const BLUE = create();
+const GREY = create();
+const GREEN = create();
+const RED = create();
+const PURPLE = create();
+const ORANGE = create();
+const UNCOLOR = create();
+
+/* c8 ignore start */
+/**
+ * @param {Array<string|Symbol|Object|number>} args
+ * @return {Array<string|object|number>}
+ */
+const computeNoColorLoggingArgs = args => {
+  const logArgs = [];
+  // try with formatting until we find something unsupported
+  let i = 0;
+  for (; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.constructor === String || arg.constructor === Number) ; else if (arg.constructor === Object) {
+      logArgs.push(JSON.stringify(arg));
+    }
+  }
+  return logArgs
+};
+/* c8 ignore stop */
+
+const loggingColors = [GREEN, PURPLE, ORANGE, BLUE];
+let nextColor = 0;
+let lastLoggingTime = getUnixTime();
+
+/* c8 ignore start */
+/**
+ * @param {function(...any):void} _print
+ * @param {string} moduleName
+ * @return {function(...any):void}
+ */
+const createModuleLogger$1 = (_print, moduleName) => {
+  const color = loggingColors[nextColor];
+  const debugRegexVar = getVariable('log');
+  const doLogging = debugRegexVar !== null &&
+    (debugRegexVar === '*' || debugRegexVar === 'true' ||
+      new RegExp(debugRegexVar, 'gi').test(moduleName));
+  nextColor = (nextColor + 1) % loggingColors.length;
+  moduleName += ': ';
+  return !doLogging
+    ? nop
+    : (...args) => {
+        const timeNow = getUnixTime();
+        const timeDiff = timeNow - lastLoggingTime;
+        lastLoggingTime = timeNow;
+        _print(
+          color,
+          moduleName,
+          UNCOLOR,
+          ...args.map((arg) =>
+            (typeof arg === 'string' || typeof arg === 'symbol')
+              ? arg
+              : JSON.stringify(arg)
+          ),
+          color,
+          ' +' + timeDiff + 'ms'
+        );
+      }
+};
+/* c8 ignore stop */
+
 /**
  * Isomorphic logging module with support for colors!
  *
@@ -1577,41 +1663,19 @@ const getUnixTime = Date.now;
  */
 
 
-const BOLD = create$1();
-const UNBOLD = create$1();
-const BLUE = create$1();
-const GREY = create$1();
-const GREEN = create$1();
-const RED = create$1();
-const PURPLE = create$1();
-const ORANGE = create$1();
-const UNCOLOR = create$1();
-
 /**
  * @type {Object<Symbol,pair.Pair<string,string>>}
  */
 const _browserStyleMap = {
-  [BOLD]: create('font-weight', 'bold'),
-  [UNBOLD]: create('font-weight', 'normal'),
-  [BLUE]: create('color', 'blue'),
-  [GREEN]: create('color', 'green'),
-  [GREY]: create('color', 'grey'),
-  [RED]: create('color', 'red'),
-  [PURPLE]: create('color', 'purple'),
-  [ORANGE]: create('color', 'orange'), // not well supported in chrome when debugging node with inspector - TODO: deprecate
-  [UNCOLOR]: create('color', 'black')
-};
-
-const _nodeStyleMap = {
-  [BOLD]: '\u001b[1m',
-  [UNBOLD]: '\u001b[2m',
-  [BLUE]: '\x1b[34m',
-  [GREEN]: '\x1b[32m',
-  [GREY]: '\u001b[37m',
-  [RED]: '\x1b[31m',
-  [PURPLE]: '\x1b[35m',
-  [ORANGE]: '\x1b[38;5;208m',
-  [UNCOLOR]: '\x1b[0m'
+  [BOLD]: create$1('font-weight', 'bold'),
+  [UNBOLD]: create$1('font-weight', 'normal'),
+  [BLUE]: create$1('color', 'blue'),
+  [GREEN]: create$1('color', 'green'),
+  [GREY]: create$1('color', 'grey'),
+  [RED]: create$1('color', 'red'),
+  [PURPLE]: create$1('color', 'purple'),
+  [ORANGE]: create$1('color', 'orange'), // not well supported in chrome when debugging node with inspector - TODO: deprecate
+  [UNCOLOR]: create$1('color', 'black')
 };
 
 /**
@@ -1666,88 +1730,8 @@ const computeBrowserLoggingArgs = (args) => {
 /* c8 ignore stop */
 
 /* c8 ignore start */
-/**
- * @param {Array<string|Symbol|Object|number>} args
- * @return {Array<string|object|number>}
- */
-const computeNoColorLoggingArgs = args => {
-  const strBuilder = [];
-  const logArgs = [];
-  // try with formatting until we find something unsupported
-  let i = 0;
-  for (; i < args.length; i++) {
-    const arg = args[i];
-    // @ts-ignore
-    const style = _nodeStyleMap[arg];
-    if (style === undefined) {
-      if (arg.constructor === String || arg.constructor === Number) {
-        strBuilder.push(arg);
-      } else {
-        break
-      }
-    }
-  }
-  if (i > 0) {
-    logArgs.push(strBuilder.join(''));
-  }
-  // append the rest
-  for (; i < args.length; i++) {
-    const arg = args[i];
-    if (!(arg instanceof Symbol)) {
-      if (arg.constructor === Object) {
-        logArgs.push(JSON.stringify(arg));
-      } else {
-        logArgs.push(arg);
-      }
-    }
-  }
-  return logArgs
-};
-/* c8 ignore stop */
-
-/* c8 ignore start */
-/**
- * @param {Array<string|Symbol|Object|number>} args
- * @return {Array<string|object|number>}
- */
-const computeNodeLoggingArgs = (args) => {
-  const strBuilder = [];
-  const logArgs = [];
-  // try with formatting until we find something unsupported
-  let i = 0;
-  for (; i < args.length; i++) {
-    const arg = args[i];
-    // @ts-ignore
-    const style = _nodeStyleMap[arg];
-    if (style !== undefined) {
-      strBuilder.push(style);
-    } else {
-      if (arg.constructor === String || arg.constructor === Number) {
-        strBuilder.push(arg);
-      } else {
-        break
-      }
-    }
-  }
-  if (i > 0) {
-    // create logArgs with what we have so far
-    strBuilder.push('\x1b[0m');
-    logArgs.push(strBuilder.join(''));
-  }
-  // append the rest
-  for (; i < args.length; i++) {
-    const arg = args[i];
-    if (!(arg instanceof Symbol)) {
-      logArgs.push(arg);
-    }
-  }
-  return logArgs
-};
-/* c8 ignore stop */
-
-/* c8 ignore start */
 const computeLoggingArgs = supportsColor
-  ? (isNode ? computeNodeLoggingArgs : computeBrowserLoggingArgs)
+  ? computeBrowserLoggingArgs
   : computeNoColorLoggingArgs;
 /* c8 ignore stop */
 
@@ -1762,45 +1746,11 @@ const print = (...args) => {
 
 const vconsoles = create$3();
 
-const loggingColors = [GREEN, PURPLE, ORANGE, BLUE];
-let nextColor = 0;
-let lastLoggingTime = getUnixTime();
-
-/* c8 ignore start */
 /**
  * @param {string} moduleName
  * @return {function(...any):void}
  */
-const createModuleLogger = (moduleName) => {
-  const color = loggingColors[nextColor];
-  const debugRegexVar = getVariable('log');
-  const doLogging = debugRegexVar !== null &&
-    (debugRegexVar === '*' || debugRegexVar === 'true' ||
-      new RegExp(debugRegexVar, 'gi').test(moduleName));
-  nextColor = (nextColor + 1) % loggingColors.length;
-  moduleName += ': ';
-
-  return !doLogging
-    ? nop
-    : (...args) => {
-      const timeNow = getUnixTime();
-      const timeDiff = timeNow - lastLoggingTime;
-      lastLoggingTime = timeNow;
-      print(
-        color,
-        moduleName,
-        UNCOLOR,
-        ...args.map((arg) =>
-          (typeof arg === 'string' || typeof arg === 'symbol')
-            ? arg
-            : JSON.stringify(arg)
-        ),
-        color,
-        ' +' + timeDiff + 'ms'
-      );
-    }
-};
-/* c8 ignore stop */
+const createModuleLogger = (moduleName) => createModuleLogger$1(print, moduleName);
 
 /**
  * Mutual exclude for JavaScript.
@@ -1848,35 +1798,27 @@ const createMutex = () => {
 
 /* eslint-env browser */
 
-const isoCrypto = typeof crypto === 'undefined' ? null : crypto;
+const getRandomValues = crypto.getRandomValues.bind(crypto);
 
 /**
- * @type {function(number):ArrayBuffer}
+ * Isomorphic module for true random numbers / buffers / uuids.
+ *
+ * Attention: falls back to Math.random if the browser does not support crypto.
+ *
+ * @module random
  */
-const cryptoRandomBuffer = isoCrypto !== null
-  ? len => {
-    // browser
-    const buf = new ArrayBuffer(len);
-    const arr = new Uint8Array(buf);
-    isoCrypto.getRandomValues(arr);
-    return buf
-  }
-  : len => {
-    // polyfill
-    const buf = new ArrayBuffer(len);
-    const arr = new Uint8Array(buf);
-    for (let i = 0; i < len; i++) {
-      arr[i] = Math.ceil((Math.random() * 0xFFFFFFFF) >>> 0);
-    }
-    return buf
-  };
+
 
 const rand = Math.random;
 
-const uint32 = () => new Uint32Array(cryptoRandomBuffer(4))[0];
+const uint32 = () => getRandomValues(new Uint32Array(1))[0];
 
 // @ts-ignore
 const uuidv4Template = [1e7] + -1e3 + -4e3 + -8e3 + -1e11;
+
+/**
+ * @return {string}
+ */
 const uuidv4 = () => uuidv4Template.replace(/[018]/g, /** @param {number} c */ c =>
   (c ^ uint32() & 15 >> c / 4).toString(16)
 );
@@ -1887,6 +1829,15 @@ const uuidv4 = () => uuidv4Template.replace(/[018]/g, /** @param {number} c */ c
  * @module promise
  */
 
+
+/**
+ * `Promise.all` wait for all promises in the array to resolve and return the result
+ * @template {unknown[] | []} PS
+ *
+ * @param {PS} ps
+ * @return {Promise<{ -readonly [P in keyof PS]: Awaited<PS[P]> }>}
+ */
+Promise.all.bind(Promise);
 
 /**
  * @param {Error} [reason]
